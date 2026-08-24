@@ -1,43 +1,40 @@
 import os
-import datetime as dt
-import pandas as pd
+import requests
 import smtplib
-from random import choice
+
+OWM_Endpoint = "https://api.openweathermap.org/data/2.5/forecast"
+
+api_key = os.environ.get("OWM_API_KEY")
 
 my_email = os.environ.get("MY_EMAIL")
 password = os.environ.get("MY_PASSWORD")
 
-now = dt.datetime.now()
-month = now.month
-day = now.day
+weather_params = {
+    "appid": api_key,
+    "lat": 29.9611,
+    "lon": 30.9296,
+    "cnt": 4,
+}
 
-data = pd.read_csv("birthdays.csv")
-dict_data = data.to_dict(orient="records")
+response = requests.get(OWM_Endpoint, params=weather_params)
+response.raise_for_status()
+weather_data = response.json()
 
-all_letters = []
-for i in range(3):
-    with open(f"letter_templates/letter_{i + 1}.txt") as letter:
-        all_letters.append(letter.read())
+will_rain = False
 
+for hour_data in weather_data["list"]:
+    condition_code = hour_data["weather"][0]["id"]
 
-for person in dict_data:
-    if person["month"] == month and person["day"] == day:
-        name = person["name"]
-        email = person["email"]
+    if int(condition_code) < 700:
+        will_rain = True
 
-        person_letter = choice(all_letters)
-        letter_with_name = person_letter.replace("[NAME]", name)
+if will_rain:
+    with smtplib.SMTP("smtp.gmail.com", 587) as connection:
+        connection.starttls()
+        connection.login(user=my_email, password=password)
 
-        with smtplib.SMTP("smtp.gmail.com") as connection:
-            connection.starttls()
-            connection.login(user=my_email, password=password)
-            connection.sendmail(
-                from_addr=my_email,
-                to_addrs=email,
-                msg=f"Subject:Happy Birthday\n\n{letter_with_name}"
-            )
-
-
-
-
-
+        connection.sendmail(
+            from_addr=my_email,
+            to_addrs=my_email,
+            msg="Subject: Rain Alert\n\nIt's going to rain today. Remember to bring an umbrella."
+        )
